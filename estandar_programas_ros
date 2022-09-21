@@ -1,0 +1,25 @@
+como organizar un repo:
+ejepmlo: paquete bump_and_go:
+1)crear directorio/paquete y entrar dentro del paquete
+
+2)crear un directorio /include/elmismonombrequeelpaquete donde iran  las cabeceras(archivos.h) para los includes e incluir en el CMakeLists.txt en include_directories{include}
+para que al poner la ruta de los include sea "nombredelpaquete/nombredel.h" y sin tener que poner "/include/nombredelpaquete/nombredel.h". Tambien se podria añadir directamente en el CMakeLists pero 
+es importante saber de que paquete y directorio viene cada cosa. catking_INCLUDE_DIRS es una variable con las direcciones de las cabeceras estandar.
+
+
+3)crear directorio src donde ira el programa principal(main) y otro directorio dentro con el nombre del paquete otra vez donde iran los .cpp
+*todas las clases que implementemos van a estar en el espacio de nombre de ese paquete
+ejemplos de archivos .cpp:
+include <bla>
+include "bla"
+
+namespace bump_and_go
+}
+constructor...
+
+metodos....
+
+metodos...
+}
+
+en el cmake list denajo de la segunda linea suele añadir el profe: set(CMAKE_CXX_STANDAR 17) para que se use el c++ version 17

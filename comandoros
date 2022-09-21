@@ -1,0 +1,514 @@
+--------------------------------------------------------------------------Ros to Ros 2-----------------------------------------------------------------------------------------------------------------
+https://github.com/fmrico/ros_to_ros2_talk_examples
+
+ros2cli: es la libreria de los verbos de ros2 y te permite hacer los tuyos propio como si fuese añadir un pluggin solo
+ros2 interface list: lista mensajes,acciones y servicios
+cuando añades cosas al src tienes que hacer desde el directorio de trabajo de colcon:
+source ./install/setup.sh
+colcon build  		//no se cual tiene que ir antes que cual.
+
+en ros los nodos no son procesos, son objetos
+std::shared_ptr sirve par crear punteros inteligentes en c. Estos apuntan las referencias a la zona de memoria y gestiona lo que con new tendrias que hacer manualmente.
+
+
+---------------------------------------------------------------------------------bloom---------------------------------------------------------------------------------------------------------------
+Crear paquetes de ros. 
+En la wiki de ros tienes toda la info.
+---------------------------------------------------------------------------------Rosbugs------------------------------------------------------------------------------------------------------------
+Permite grabar la informacion que pasa por los nodos y recrearla cuando queramos
+
+ejemplo:
+roslaunch robots sim.launch
+rosbag record -a //tambien se puede rosbag record nombre_topic1 nombre_topic2 .....
+rosbag play nombre_grabacion
+
+si quieres usar la info grabada:
+Reiniciar el simulador
+rosbag play nombre grabacion //util por ejemplo si grabas el roscommands/velocity, grabas el movimiento del robot y luego haces rosbug play de esa grabacion y se vuelve a mover
+
+---------------------------------------------------------------------------------Roswtf--------------------------------------------------------------------------------------------------------------
+hace ciertos diagnostico de lo que podria estar mal del sistema en ros
+
+---------------------------------------------------------------------------------Plotjuggler----------------------------------------------------------------------------------------------------------
+sirve para graficar topics
+rosrun plotjugglet plotjuggler //si no te tabula, tu dale igual
+
+---------------------------------------------------------------------------------Ros en varias maquinas a la vez-------------------------------------------------------------------------------------
+En la maquina con la que te estas conectando al robot
+saber tu ip: ip adress show wlo1//el de tu maquina
+roscore o roslaunch en el robot
+export ROS_IP=ip de tu maquina
+export ROS_MASTER_URI=dns del robot(https...)
+nano /etc/hosts y pones la ip y dns correspondientes del robot
+y ya al hacer rostopic list ya tendrias los topics del robot
+
+---------------------------------------------------------------------------------Creacion de interfaces graficas-----------------------------------------------------------------------------------
+Se suele usar la libreria de QT en ros es RQT por eso el rqt_graph.... etc
+Para crear las tuyas usa (rosrun rqt_gui rqt_gui) o (rqt) solo directamente y luego exportas la perspectiva.
+para mirar ejemplos en git mira en https://github.com/ros-visualization/rqt_common_plugins/tree/groovy-devel/rqt_plot
+Cuando quieras crear una interfaz grafica para un proyecto, te compias uno ya existente y lo vas modificando con rqt_creator y lo salvas, no hace falta que le des a generar codigo, no nos interesa.
+
+Ejemplo:
+desde /Escritorio/catking_ws/src/software_arq_robots_course
+qtcreator plansys2_tools/ plansys2_tools/src/rqt_plansys2_performers/rqt_plansys2_performers.ui //abrimos con el diseñador de interfaces, nuestra interfaz
+												   //y la vamos añadiendo los objetos. Luego guardas sin generar codigo(guardas normal)
+												   //y vas programando el funcionamiento en el .cpp y .hpp
+
+----------------------------------------------------------------------------------navegación--------------------------------------------------------------------------------------------------------
+mapa: fichero .pgm asociado a un .yaml con valores para interbretar el pgm. Al arrancar el map server y pasarle ese archivo, el mapa se va a publicar en un topic map_msgs/ocupancity. Basicamente 
+es una regilla de ocupacion regular que indica cada una de sus posiciones un valor, 0 = libre, 254 = ocupado, 255 = desconocido, el resto de valores se puede utilizar para muchas cosas.
+Se publica en un topic para que cualquier proceso/nodo del sistema lo pueda utilizar. Uno de los procesos es el de la localizacion que esta en un paquete AMCL(augmented montecarlo localizatión).
+
+Un robot estima su posición de forma probabilistica. El amcl se va a subscribir al mapa y a todas las fuentes de información que tenga(lasers,camaras...) y va a publicar donde esta el robot a trabes
+de una distribución de probabilidad.
+
+navegacion en el simulador:
+
+Teniendo el mapa:
+roslaunch robots sim.launch1
+roslaunch navigation localization.launch
+añadimos por topic el mapa en rviz
+roslaunch kobuki_keyop keyop.launch  movemos el robot con el teclado 
+
+Como mapear:                                                                                                                                                                                  al origen
+roslaunch robots sim.launch cuando se mapea, el 0,0,0 siempre tiene que ser donde arranca el robot por defecto, luego si quieres cambiarle su posicion inicial, se lo piedes indicar pero en relacion roslaunch navigation slam_mapping.launch  para subir la resolucion, aumentar el delta
+rosrun map_server map_saver para guardar el mapa en la ruta donde te encuentres. para cambiar en nomre del mapa tienes que cambiarlo en el mapa, y en el .yaml
+
+y para luego navegar por el:
+roslaunch navigation navigation.launch map_file:=absolute_path/map.yaml
+
+amcl: tiene como resultado una tf de odom a map
+
+navegacion: 
+
+	global planner: coge el mapa, la localizacion del robot, y donde le has dicho que tiene que ir, y crea una ruta.usa el global_costmap, que es el mapa que has hecho con las paredesagrandadas.
+	Local planner: Con la ruta anterior, intenta seguirla generando las velocidades necesarias. Este tambien tiene un costmap, que es mas pequeñito
+	Recovery_behavior: Es un nodo que usa el robot cuando se desorienta un poco o se desactualiza el mapa o por si le surgen otros problemas. Normalmente suele ser girar sobre si mismo...
+
+configurar los parametros de los nodos:navigation/launch/params
+	-move_base_params.yaml: tiene los recovery_vehaviors, los puggins y algoritmos de movimiento....
+	-costmap_common_params.yamls: contiene los parametros comunnes para los costmaps y las fuentes de observacion
+	-dwa_local_planner_params.yamls: contiene las velocidades a la hora de seguir la ruta. Goal tolerance, indica la tolerancia para considerar que has llegado al objetivo.
+-----------------------------------------------------------------------------------tf---------------------------------------------------------------------------------------------------------------
+
+tf= transformadas
+frame: un eje de referencia
+
+rostopic info /tf
+tipo de mensaje ff2_msgs/TFMessage
+
+el campo string frame_id es el frame padre 
+el campo string child_frame_id es el frame del hijo
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+behavior tree: mirar la pagina web behaviortree.dev 
+
+*bicode aplicacion para ver graficamente las maquinas de estado.
+
+3 "capas" para programar robots:
+skills/capabilitys: todas las cosas que puede hacer el robot.
+tarea:organiza todas las skills/capabilitys para que actuen en conjunto y hacer algo mas complejo es decir, una tarea.
+mision: decide que tareas tiene que hacer el robot para cumplir un objetivo.
+
+arbol:nodo aciclico dirigido.
+un nodo(padre) que puede tener hijos(otros nodos). un nodo solo puede tener un padre. y entre los nodos, hay conexiones.
+nodos dbt= nodos de behavior treee.
+
+los nodos que no tienen hijos, son subsistemas, y normalmente los implementa el usuario.(esto seran nodos hojas)
+nodos con hijos: nodos de control o decoradores que controlan el flujo de ejecución.
+*tik funcion de llamada para un nodo(como step en las maquinas de estado) y puede retornan 3 valores: succces(acabo con exito),failure(acabo con fallo) y runnnin(aun se esta ejecutando)
+
+nodo de accion: hace cosas
+nodo de control:observa cosas. envia tick hacia los nodos de abajo basicamente y comunicar los ticks de los hijos a los padres
+nodo de secuencias:nodo que hace tik a cada uno de los hijos(un solo tick para todos los hijos) y cuando el ultimo hijo devuelve succes, devuelve el nodo de control succes al nodo de arriba 
+nodos de fallback:hace tick a su primer hijo(que suele ser de condicion) y si devuelve succes, no haces tick al resto de hijos. y si todos los hijos fallan, devuelves fallo al de arriba
+nodos decoradores: solo pueden tener un hijo. Suelen llamarse para que llame a un hijo un numero de veces para intentar ver si tienes succes despues de un numero de intentos. o cuando quieres que se ejecute a cierta frecuencia. Los nodos decoradores, se pueden decir que son nodos para complementar otros nodos.
+
+nodo parallel(): con un tick, ejecutas a todos los hijos y segun cuantos devuelvan succes, el padre devuelve succes o no. No tiene por que haber concurrencia ojo.
+			    tik	
+			    |
+			---------
+ 			|forward|       ------
+			| 15 seg|------>|turn|
+			---------
+			    |
+			 /cmd_vel
+			 
+biblioteca para behaviortress = behaviorTree.cpp
+
+blackboard. es un sitio donde pueden acceder todos los nodos, y donde vas a poder leer y escribir contenidos. ES basicamente un diccionario que segun el string que le des, te va adar su contenido(un valor)
+
+Hay 3 tipos de secuencias:
+secuencia: si un hijo devuelve fallo, y tu retornas fallos, si te vuelven a hacer tick reinicias la secuencia desde cero.
+
+Reactive secuence. Si un hijo devuelve exito, pasas al siguiente, si te vuelven a hacer tick sin haber ejecutado a todos los hijos,reinicias la secuencia desde cero.
+Secuence star. Si un hijo devuelve exito, pasas al siguiente y si te vuelven a hacer tick sin haber ejecutado a todos hijos,continuas por donde lo habias dejado. y si hubiese dado fallo algun hijo, tambien continuas si vuelven ha hacerr tick por el nodo que fallo.
+
+aplicaciones para crear behavior trees: 
+rosrun groot Groot.
+
+crear enlace simbolico tras instalar groot: sudo ln -s /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/libGL.so
+
+explicit: que solo se puede hacer con un string "puro", sin conversiones vamos
+rosrun behaviortree behavior tree para arancar en nodo de ejemplo del profesor.
+
+puertos importantes 1666 y 1667 para groot ya que nos va a permitir ver la ejecucion en directo.
+
+-------------------------------------------------------------------------------------Instalar ros:------------------------------------------------------------------------------------------------
+1)activar el worckspace de ros para todas las terminales:
+echo source /opt/ros/noetic/setup.bash >> ~/.bashrc
+*ahora tienes que abrir otra terminal para que tenga efecto
+2)crear directorio trabajo: mkdir catkin_ws
+3)crear directorio fuente dentro del directorio trabajo: mkdir src
+4)compilar directorio(siempre se hace desde la raiz del workspace):catkin_make
+ y con eso se crean los ficheros build y devel
+5)activar nuestro workspace personal:source devel/setup.bash (esto desde el raiz de nuestro ws)           
+echo source Escritorio/catkin_ws/devel/setup.bash >> ~/.bashrc  para que se haga siempre que abras un terminal
+6)en /catkin_ws/src clonar el repositorio: git clone --recursive https://github.com/fmrico/software_arq_robots_course.git
+7) en el raiz del ws hacemos: code . (abre el visualcode del directorio actual)
+8)catkin_make -j1 del raiz para compilar con un hilo para evitar problemas.
+9)roslaunch robots sim.launch
+
+--------------------------------------------------------------------------------instalr kobuki---------------------------------------------------------------------------------------------------------
+
+sudo adduser adrian dialout y reiniciar el ordenador
+sudo apt-get install ros-noetic-kobuki-ftdi
+rosrun kobuki_ftdi create_udev_rules
+
+--------------------------------------------------------------------------------configurar laser-------------------------------------------------------------------------------------------------------
+sudo cp 10-rplidar.rules /etc/udev/rules.d/
+cp 56-orbbec-usb.rules /etc/udev/rules.d/
+cd Escritorio/catkin_ws/src/
+git clone -b fixes_narrow_error https://github.com/fmrico/rplidar_ros.git
+
+para ver los dispositivos conectados al ordenador: ls -l /dev | grep ttyUSB(ese es para los posibles lasers)
+roslaunch robots kobuki_rplidar.launch laser_serial_port:=/dev/ttyUSB1
+roslaunch robots kobuki_rplidar.launch
+rviz y add tf y el pixel frame, odom
+
+sudo apt-get install ros-noetic-op
+
+--------------------------------------------------------------------------------configurar camara-----------------------------------------------------------------------------------------------------
+
+ cd src/
+ git clone --recursive https://github.com/leggedrobotics/darknet_ros.git
+ nvcc --version //para mirar si tenemos cuda
+ nvidia-smi//miramos si va el driver
+ apt-cache search cuda
+ sudo apt get install nvidia-cuda-toolkit nvidia-cuda-toolkit-gcc
+ sudo apt-get install nvidia-cuda-toolkit nvidia-cuda-toolkit-gcc
+ sudo apt-get install nvidia-cuda-dev 
+ sudo apt install nvidia-driver- //instalas los drivers
+ nvcc --version
+ cd ..
+ catkin_make
+
+ejecutar// si hiciese falta un core usa roscore.
+roslaunch openni2_launch openni2.launch //este es el launcher para la camara del kobuki
+roslaunch darknet_ros darknet_ros.launch image:=/camera/rgb/image_raw
+
+
+roslaunch usb_cam usb_cam-test.launch   //este es el launcher para la webcam
+roslaunch darknet_ros darknet_ros.launch image:=/usb_cam/image_raw //para usar darknet_ros 
+subir fiabilidad de darknetross: darknet_ros/config/yolov2-tiny.yaml value:el que quieras,a mas alto, mas fiabilidad
+rostopic echo /darknet_ros/bounding_boxes: es el topic donde se publica lo que detencta
+
+yolo: deteccion
+yolact: segmentación: te dice que pixeles son lo que ocupa el objeto que ha detectado
+openpose: sirve para detectar la posicion de una persona o de sus manos
+
+paquete camerascpp
+	nodo_camera
+	-/hsv/image_filtered imagen filtrada
+	opencv: libreria para tratamiento de imagenes mas usado.
+	para obtener la imaben, se usa la libreria image pero para tratarla, se usa la de opencv ya que te da la posicion de un pixel.... 
+	
+--------------------------------------------------------------------------------usar camara 3d----------------------------------------------------------------------------------------------------
+lanzar launcher de camara 3:
+-roslaunch openni2_launch openni2.launch  //esto activara todos los topics a los que nos vamos a poder subscribir
+-rostopic list para ver todos los topics que tenemos para usar
+	/camera/depth/camera_info //contiene la info de la camara
+	
+	rviz para suscribirnos a los topics y verlos
+		/camera/ir/image //nos da la imagen en infrarrojo
+		/camera/rgb/image_raw //nos da la imagen de rgb
+		/camera/depth/image //nos da la imagen de profundidad
+
+	rostopic echo /camera/rgb/image_raw --noarr // para ver que hay dentro del topic
+		-noarr para que no te saque el array de pixeles ya que sino veeriamos muchisima informacion
+		
+	a la hora de programar. En ros solemos subscribirnos o publicar con los publicadores y subscriptores normales, pero hay unas librerias que sirven para usar publicadores y subscriptores mas 
+	avanzados, utiles por ejemplo para el procesamiento de imagenes. En este caso tenemos:
+		image_transport::ImageTransport it_; //esto seria el nodle handler de los image_transport
+		image_transport::Subscriber image_sub_;
+		image_transport::Publisher image_pub_;
+		
+		image_sub = it.subsribe("topic",1,...) ejemplo en sfwt_robots/cameras_cpp/src/nodo_camera.cpp
+		
+	Esto no solo crea un topic al crear un image_transport sino que nos permite usar distintos plugins(librerias de imagenes que se usan en tiempo de ejecución)
+
+	PointCloud2 9megas a 20hz 
+	depth vs depth_registered: depth_registered te permite tener puntos en el espacio(x,y,z) y ademas sus valores rgb
+	para usarlo necesitamos la biblioteca pcl 
+	cuando tenemos un callback de tipo poincloud2 lo pasamos a un tipo de datos de tipo pcl
+	pcl::PointClud //ejemplo en sfwt_robots/cameras_cpp/src/nodo_rgbd_filter
+	pero esto va a estar en el fraim de la camara, lo normal es que lo queramos pasar en el kobuki por ejemplo a base footprint
+	rosrun rqt_tf_tree rqt_tf_tree te enseña una imaben con los frames disponibles otra opcion es mirarlo en el rciz
+	los frames se almacenan en tf y en tf2, es como el canal donde se echan todas las transformadas.
+	
+	en el trycatch de sfwt_robots/cameras_cpp/src/nodo_rgbd_tf podemos ver como pasar transformar todo a pointcloud indicando ademas a que frame queremos traspasarlo
+	
+	para tener en un mismo callback varios topic, tenemos un ejemplo en sfwt_robots/cameras_cpp/src/nodo_bbx
+
+ --------------------------------------------------------------------------------Comandos--------------------------------------------------------------------------------------------------------------
+ 
+ para crear el esqueleto de un paquete(esto no se suele utilizar, lo mejor es copiar y pegar de un paquete ya existente):
+ catkin_create_pkg nombre_paquete dependencies dependencia1 dependencia2 ...
+ ejemplo:
+ catkin_create_pkg test_clase dependencies rospp std_msgs
+ 
+ para buscar que paquetes has de instalarte para descargar un programa:
+ apt-cache search <nombre del programa>
+ sudo apt-get install <nombre del paquete obtenido del comando anterior>
+ 
+ para buscar algun paquete de ros para luego instalar:apt-cache search ros-noetic
+ roscd te lleva al devel de tu ws
+ roscd <nombre de un paquete> te lleva al directorio del paquete
+ rosnode list: muestra todos los nodos ejecutandose actualmente
+ rosnode info /gazebo: da informacion sobre el nodo gazebo
+ rostopic list: muestra todos los topics del sistema
+ rostopic info /scan: muestra info del topic
+ rosmsg show <nombre del topic>: muestra los campos del mensaje de un topic
+ rostopic echo /scan: muestra los mensajes que se estan publicando de un topic
+ rostopic echo --noarr /scan: lo mismo que lo anterio pero no muestra arrays.
+ rosls <nombre paquete> hace un ls de ese paquete
+ rosrun rviz rviz:esto es un visualizador
+ roscore: ejecuta un master
+ 
+ rostopic pub -r 10 /mobile_base/commands/velocity geometry_msgs/Twist "linear:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+angular:
+  x: 0.0
+  y: 0.0
+  z: 0.3" 
+
+esto publica en un topic con una frecuencia de 10 hz ese mensaje
+
+Publicar cada 10 hercios la palabra hola en el topic chatter
+	rostopic pub -r 10 /chatter std_msgs/String "data: 'hola'" 
+	
+Para ver que esto es vd:
+	rostopic echo /chatter
+	
+Para ver los publicadores y subscriptores de un topic:
+	rostopic info /chatter
+	
+Para ver el grafo de computación:
+	rosrun rqt_graph rqt_graph 
+	
+Para compilar un programa:
+	g++ nombredelprograma.cpp -o <nombreoficherobjeto>
+	./nombreficheroobjeto //para ejecutar
+
+Para compilar un programa de ros:
+	catkin_make --pkg basics_ros
+
+para ejecutar un programa de ros:
+	rosrun <pakete> <nombreficheroobjeto> 	
+		ejemplo: rosrun basics_ros nodo_simple // es decir: 
+		
+para depurar un programa:
+	g++ nombredelprograma.cpp -o <nombreoficherobjeto> -g
+	gdb <nombreficheroobjeto>
+
+para arrancar el driver de la base del kobuki:
+	roslaunch kobuki_node minimal.launch
+	
+para sacar informacion de un mensaje del kobuki:
+	rosmsg show kobuki_msg/ButtonEvent
+	
+cambiar el led del kobuki:
+	rostopic pub /mobile_base/commands/led1 kobuki_msg/Led "value: 3"
+
+mober kobuki con las flechas del ordenador:
+	roslaunch kobuki_keyop keyop.launch
+
+obtener info sobre el mensaje del laser del kobuki:	
+	rosmsg show sensor_msg/LaserScan
+
+roservice list
+rossercive info
+rosservice call
+ -----------------------------------------------------------------------------Teoría----------------------------------------------------------------------------------------------------------------
+ grafo:representacion de nodos y arcos. 
+ Lazo de computacion: parte dinamica compuesta por los procesos ya en ejecución
+ En ros,un nodo es un proceso que puede formar parte del lazo de computacion. Se pueden comunicar con 3 paradigmas
+ 
+ 	-publicacion/Subscripción:Comunicacion asincrona. Un nodo publica y los otros nodos suscritos lo reciben.
+ 	-Servicios: Comunicación 1:1. 1 comunicación, 1 respuesta. Comunicación sincrona.
+ 	-Acciones:Comunicacion de solicitud a un nodo que puede durar mucho tiempo como navegar hasta un punto. El nodo que ha pedido realizar la accion, va haciendo otras cosas y de ven en cuando 
+ 		recive feedback y al final obtiene el resultado. Pero mientras puede ir haciendo otras cosas hasta que se finalice la acción, no como en los servicios.
+ 		
+ Paquete:En la dimensión del workspace es la unidad mínima en la que se distribuye el software de ros. Contiene librerias, ejecutables, lanzadores... Podemos identificarlos por que son un directorio que tiene un pakage.xml
+ 
+ 3 Dimensiones de ros:
+ -comunidad:merchandasing...
+ -workspace:Parte estatica que indica donde esta en tu sistema de ficheros las cosas instaladas, cuales son las herramientas para acceder a los ejecutables...
+ -Grafo de computación
+ 
+ Topic:Un canal de comunicación entre nodos que solo puede tener un tipo de mensaje.
+ 
+ El master/core/roscore: Es un proceso que el resto de los nodos si quieren formar parte del arco de computación tienen que conocer. Normalmente esta en una ip y puerto determinado. Cada vez que arranca un nodo, se debe publicar ahí y cada vez que un nodo dice que va a publicar en un topic, tiene que publicarse ahí indicando su ip y puerto y cuando alguien se quiere subscribir a un topic, le pregunta donde esta dicho topic. Pueden haber varios publicadores para un topic.
+
+Laser:
+	frame = eje de referencia
+	arcos = transformacion del eje compuesta por una rotación y una traslación
+	stamp = instante de tiempo cuando fue capturada esa información receptiva
+	para la arcotangente de un numero (x,y) usar atan(y,x) en c++
+	amplitud maxima de un laser = angulo maximo - angulo minimo
+	el eje x siempre es hacia donde apuntan los "ojos del robot"
+	range min and max = rango minimo y maximo del sensor. si es mas del rango, te da como valor infinito. y cuidado tambien con los nan= not a number
+	para comprobar si algo es infinito o nan, usar la funcion std::isinf() o std::isnan()
+	para averigurar referencias de c++ usar las paginas cppreferences o cplusplus(mejor esta, da mas info)
+	ranges[] donde estan las distancias. ej 0.3 = 30 cm ya de normal trabajamos en radianes, metros y segundos
+	en el array las posiciones son[angulo min, angulomin+increment,angulomin+increment*2, ...., angulo max]. el angulo cero siempre esta en la mitad del array y luego ira de +angulo a -angulo
+	ej leer lectura de lo de delante: msg->ranges[msg->ranges.size()/2]
+	intensities[]esto no se suele usar, es de los draivers del sensor y muestra la intensidad del sensor en una escala fisica
+	
+camara:
+	controlador proporcioinal:kp*error(t)
+	controlador derivativo:kd*(error(t)-error(t-1))
+	controlador integrador:Ki*(intgralde(t-5 por ejemplo) a t del errort*di)
+	
+	los valores de entrada y salida del pid se ponen en valor absoluto ya que este pid tiene en cuenta los signos y automaticamente lo va a tener en cuenta.
+topics: como subscribirse: 
+	-por parametros: se le indicas por parametros a que topic tiene que subscribirse
+	-por remapeo: tu tienes ya unos topics que se van a subscribir a los que quieras. Tus topics no son los que cambian, son los topics a los que se van a subscribir lo que lo van a hacer 
+	para hacer remapeos busca en internet roslaunch remap y te llevara a la pagina oficial de ros. Es tan facil como poner una linea de codigo dentro de la etiqueta node si lo quieres hacer con
+	un launcher. Y si es con rosrun: hacers el remapeo con topic:=topic2
+ 
+----------------------------------------------------------------------------Metodos de ros-------------------------------------------------------------------------------------------------------------
+No usar usingnamespace... para no poner cout en nugar de std::out.... ya que si usas un usingnamespace para cada paquete que vayas a usar vas a crear colisiones.
+
+	ros::init(arg, argv, "simple"); //parsea en argc o argv por si hay argumentos que me interese y que se llame simple.
+	
+	ros::NodeHandle n;//Incorpora el nodo en el grafo de computación. Puedes crear todos los nodehandle que quieras, pero internamente, solo va a haber uno por nodo.
+	
+	ros::spin();//gestiona todos los mensajes o comunicaciones entrantes que lleguen a ese nodo. Si le llega algo, hace lo que tenga programado hacer y sino le llega nada, se queda esperando
+	
+	ros::spinOnce();//Hace lo mismo que ros::spin() pero si no hay ningun mensaje que gestionar, continuas con la ejecucion principal
+	
+	ros::Rate loop_rate(x);//establece la frecuencia de ejecucion del nodo combirtiendo el nodo en un nodo activo que se va a estar ejecutando a esa frecuencia
+	
+	loop_rate.sleep(); el nodo hace un sleep de la frecuencia indicada en el looprate() - el tiempo que haya pasado desde la ultima vez que ejecuto el nodo
+			// si no puede cumplir con la frecuencia  por que el nodo ha tenido que hacer cosas desde que se ejecuto hasta el sleep,no pasa nada, simplemente se retrasara la siguiente 				// ejecucion del nodo y no hará sleep.
+	
+	ros::ok();ros utiliza el shift term(la señal de salida de linux de un proceso) es decir, esto es true hasta que se mata el proceso con control+c por ejemplo
+	
+	ROS_INFO("string %d", int)// ojo, esto no es una funcion, es una macro. Una macro es como un define pero que en lugar de cambiar el preprocesador el un nombre por un valor, va a cambiar 
+			//el nombre por el resultado de una funcion cuyos parametros estas pasando entre parentesis. En este caso, ese metodo va a funcionar como un printf y que ademas te va a 
+			imprimir el nivel de criticidad del mensaje(info,error...), la marca de tiempo en segundos. Tambien, publicara estos mensajes en el topic rosout
+			para ver esto: rostopic echo /rosout
+			para ver esto de forma grafica: rosrun rqt_console rqt_console
+	
+	ros::Publisher num_pub = n.advertise<std_msgs::Int64>("/message", 1); 
+										n es el nombre de nuestro nodehandle
+										si pusieses message en lugar de /message estaria creando el topic en un espacio de nombre propio en lugar de en el 										absoluto. Es decir, al ejecutar el programa con message y hacer rosrun basics_ros nodo_pub __ns:=robot1 
+										al hacer rostopic list veeriamos que nuestro topic seria /robot1/message en lugar de /message que se obtendria
+										poniendo /message y haciendo rosrun basics_ros nodo_pub __ns:=robot1  nuestro nodo si seria /robot1/num_publisher pero 
+										nuestro topic se llamaria solo /message es decir, si no ponemos la barra nos va a cambiar el nombre del nodo y del topic
+										pero si no ponemos la barra, solo cambia el nombre del nodo con este comando: rosrun basics_ros nodo_pub __ns:=robot1.
+										Ultima aclaracion, si pones el /nombretopic, el nombre es absoluto, como las rutas relativas, sino se añade delante el 
+										espacio de nombre.
+										
+										el 1 es el tamañado de la cola, cada mensaje se envia con el spineonce
+	
+	ros::Publisher num_pub = n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 1); hacemos que publique en el topic de la base movil del robot
+	geometry_msgs::Twist msg; //tenemos un objeto msg que va a cambiar las velocidades del robot. El tipo del objeto tiene que ser igual que el tipo de mensaje que manda el topic, el de 
+				   //este ejemplo se veria con rostopic info /mobile_base/commands/velocity  y nos diria que es del tipo geometry_msgs/Twist.
+				   importante:
+				   		1) incluir las dependencias del paquete: en pakage.xml añadimos:
+				   			<build_depend>geometry_msgs</build_depend>
+				   			....
+				   			<exec_depend>geometry_msgs</exec_depend>
+				   			
+				   		2) incluir en CMake lists:
+				   			-en find_package(catkin REQUIRED COMPONENTS...
+				   				...
+				   				geometry_msgs
+				   				...
+				   			-en catkin_package(
+								CATKIN_DEPENDS roscpp ... geometry_msgs
+						3) compilar con catkin_make : catkin_make --pkg basics_ros
+						*****las dependencias siempre son a nivel de pakete
+    	msg.linear.x= 1.0; //ajustamos la velocidad x y el resto de parametros se quedan a cero ya que no les estamos poniendo ningun valor
+    	num_pub.publish(msg); //publicamos el mensaje
+	
+	
+	void messageCallback(const std_msgs::Int64::ConstPtr& msg)// esto es un signature que pide una refereferencia a un puntero inteligente. lo que se suele hacer, es obtener el mensaje como un 					puntero
+	
+	****diferencias entre const
+	void messageCallback(const std_msgs::Int64::ConstPtr& const msg) const
+		el primer const indica que no puedes modificar el puntero
+		el const de en medio significa que no puedes modificar el valor al que apunta
+		el const final indica que el metodo no va a cambiar el estado interno del objeto 
+	
+	ros::Subscriber sub = n.subscribe("/message", 1, messageCallback); // messageCallback es el puntero a la funcion a ejecutar. Los mensajes que vea, se guardaran en la cola y cuando se 
+										ejecute spineonce, se "veran" realmente llamando a messageCallback con ese mensaje como argumento
+										
+	La variante principal es un nodo subscriptor pero que es un objeto de una clase cuyos metodos van a procesar los mensajes.
+	a los atributos de una clase se les suele llamar con:"nombre__"
+	
+	sub_ = n_.subscribe("message", 1, &Listener::messageCallback, this); a digerencia del caso anterior, tenemos que indicar el this que pertenece el metodo a este objeto y no es el metodo 
+										de otro objeto de la misma clase
+		
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+
